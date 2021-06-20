@@ -63,10 +63,10 @@ constexpr auto XTD_IMPL(ns::minus) (std::array<T, N> const& t, std::array<T, N> 
 
 For any expression equivalent to `ns::func(another::namspace::A)`:
 
-1. Applicable `impl_this(ns::func)` definition inside class ::another::namspace::A
-1. Applicable `impl(ns::func)` definiton inside namespace ::another::namspace
-1. Applicable `impl(ns::func)` definiton inside namespace ::another
-1. Applicable `impl(ns::func)` definiton inside namespace :: (root namespace)
+1. Applicable `XTD_IMPL_THIS(ns::func)` definition inside class ::another::namspace::A
+1. Applicable `XTD_IMPL(ns::func)` definiton inside namespace ::another::namspace
+1. Applicable `XTD_IMPL(ns::func)` definiton inside namespace ::another
+1. Applicable `XTD_IMPL(ns::func)` definiton inside namespace :: (root namespace)
 
 Which is a much more powerful method of providing customisation points than simple ADL, which only checks 1. and 2.
 
