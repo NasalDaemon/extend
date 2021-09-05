@@ -11,7 +11,7 @@ See [iter](https://github.com/NasalDaemon/iter) library.
 #include "extend.hpp"
 
 namespace ns {
-    XTD_FUNCTION minus; // Define customisation point ns::diff
+    XTD_FUNCTION minus; // Define customisation point ns::minus
 }
 
 // Default implementation in root namespace
@@ -63,11 +63,11 @@ constexpr auto XTD_IMPL(ns::minus) (std::array<T, N> const& t, std::array<T, N> 
 
 For any expression equivalent to `ns::func(another::namspace::A)`:
 
-1. Applicable `impl_this(ns::func)` definition inside class ::another::namspace::A
-1. Applicable `impl(ns::func)` definiton inside namespace ::another::namspace
-1. Applicable `impl(ns::func)` definiton inside namespace ::another
-1. Applicable `impl(ns::func)` definiton inside namespace :: (root namespace)
+1. Applicable `XTD_IMPL_THIS(ns::func)` definition inside class ::another::namspace::A
+1. Applicable `XTD_IMPL(ns::func)` definiton inside namespace ::another::namspace
+1. Applicable `XTD_IMPL(ns::func)` definiton inside namespace ::another
+1. Applicable `XTD_IMPL(ns::func)` definiton inside namespace :: (root namespace)
 
-Which is much more powerful than simple ADL, which only checks 1. and 2.
+Which is a much more powerful method of providing customisation points than simple ADL, which only checks 1. and 2.
 
 Due to 3. and 4., it is possible to create generic functions that apply to standard library classes while still having fully qualified functions to remove any ambiguity.
