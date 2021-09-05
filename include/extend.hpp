@@ -327,7 +327,7 @@ using tagged_bindable = bindable<Tag, Invoker, Interface>;
 template<class F>
 constexpr auto apply(F&& func) {
     return [func = (F&&)func]<class T>(T&& tuple) mutable {
-        return std::apply(func, (T&&)tuple);
+        return apply(func, (T&&)tuple);
     };
 }
 
