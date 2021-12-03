@@ -6,6 +6,10 @@
 #include <functional>
 #include <string_view>
 
+#ifndef FWD
+#  define FWD(arg) static_cast<decltype(arg)&&>(arg)
+#endif
+
 inline namespace xtd_adl {
 
 struct xtd_free_t {};
@@ -35,10 +39,10 @@ namespace invokers {
     struct main {
         template<class... Ts>
         static constexpr auto invoke(Ts&&... in)
-            noexcept(noexcept(xtd_invoke_main((Ts&&) in...)))
-            -> decltype(xtd_invoke_main((Ts&&) in...))
+            noexcept(noexcept(xtd_invoke_main(FWD(in)...)))
+            -> decltype(xtd_invoke_main(FWD(in)...))
         {
-            return xtd_invoke_main((Ts&&) in...);
+            return xtd_invoke_main(FWD(in)...);
         }
     };
 }
@@ -66,7 +70,7 @@ struct [[nodiscard]] bound<F, 0, O> : F {
 
 template<size_t A = 0, bool O = false, class F>
 static constexpr bound<std::decay_t<F>, A, O> make_bound(F&& f) {
-    return { (F&&) f };
+    return { FWD(f) };
 }
 
 namespace concepts {
@@ -104,11 +108,11 @@ namespace concepts {
 
     template<class CP, class... Ts>
     concept CustomisedFree = requires (const CP& bindable, Ts&&... in) {
-        CP::invoker_t::invoke(xtd_free_t{}, bindable.self(), (Ts&&) in...);
+        CP::invoker_t::invoke(xtd_free_t{}, bindable.self(), FWD(in)...);
     };
     template<class CP, class... Ts>
     concept CustomisedMethod = requires (const CP& bindable, Ts&&... in) {
-        CP::invoker_t::invoke(xtd_method_t<>{}, bindable.self(), (Ts&&) in...);
+        CP::invoker_t::invoke(xtd_method_t<>{}, bindable.self(), FWD(in)...);
     };
     template<class CP, class... Ts>
     concept Customised = CustomisedMethod<CP, Ts...> || CustomisedFree<CP, Ts...>;
@@ -118,14 +122,14 @@ namespace concepts {
 
     template<class CP, class... Ts>
     concept AllowedFree = requires (const CP& bindable, Ts&&... in) {
-        { CP::invoker_t::invoke(xtd_free_t{}, bindable.self(), (Ts&&) in...) } ->
-            CompatInterface<decltype(typename CP::interface_t{}.apply((Ts&&) in...))>;
+        { CP::invoker_t::invoke(xtd_free_t{}, bindable.self(), FWD(in)...) } ->
+            CompatInterface<decltype(typename CP::interface_t{}.apply(FWD(in)...))>;
     };
 
     template<class CP, class... Ts>
     concept AllowedMethod = requires (const CP& bindable, Ts&&... in) {
-        { CP::invoker_t::invoke(xtd_method_t<>{}, bindable.self(), (Ts&&) in...) } ->
-            CompatInterface<decltype(typename CP::interface_t{}.apply((Ts&&) in...))>;
+        { CP::invoker_t::invoke(xtd_method_t<>{}, bindable.self(), FWD(in)...) } ->
+            CompatInterface<decltype(typename CP::interface_t{}.apply(FWD(in)...))>;
     };
 
     template<class T>
@@ -144,14 +148,14 @@ using tag_of = const std::remove_cvref_t<decltype(obj)>&;
 template<class L, concepts::Bound R>
 requires (!concepts::Bound<L>)
 constexpr decltype(auto) operator ->* (L&& l, const R& r) {
-    return r((L&&) l);
+    return r(FWD(l));
 }
 
 template<class L, concepts::Bindable R>
 requires (!concepts::Bound<L>)
 constexpr decltype(auto) operator ->* (L&& l, const R& r) {
-    return make_bound([&]<class... T>(T&&... in) {
-        return r((L&&) l, (T&&) in...);
+    return make_bound([&](auto&&... in) {
+        return r(FWD(l), FWD(in)...);
     });
 }
 
@@ -161,14 +165,14 @@ constexpr auto operator ->* (L&& l, R&& r) {
         "When building a chain of bindables that is not immediately invoked, "
         "please call bindable.capture(...) instead of bindable(...)");
     return make_bound<0, true>(
-        [l = (L&&) l, r = (R&&) r]<class T>(T&& in) {
-            return l((T&&) in) ->* r; });
+        [l = FWD(l), r = FWD(r)](auto&& in) {
+            return l(FWD(in)) ->* r; });
 }
 
 template<concepts::Bound L, class R>
 requires (!concepts::Bound<R>)
 constexpr decltype(auto) operator ->* (const L& l, R&& r) {
-    return l((R&&) r);
+    return l(FWD(r));
 }
 
 template<concepts::Bound L>
@@ -176,9 +180,8 @@ constexpr decltype(auto) operator ->* (const L& l, bind_placeholder<>) {
     return l();
 }
 
-template<class L, class R>
-constexpr decltype(auto) operator | (L&& l, R&& r) {
-    return (L&&) l ->* (R&&) r;
+constexpr decltype(auto) operator | (auto&& l, auto&& r) {
+    return FWD(l) ->* FWD(r);
 }
 
 namespace detail {
@@ -188,6 +191,22 @@ namespace detail {
     };
     template<class... Fs>
     overload(Fs...) -> overload<Fs...>;
+
+    template<class R>
+    constexpr decltype(auto) select(auto&& l, R&& r) {
+        if constexpr (concepts::BindPlaceholder<R>)
+            return FWD(l);
+        else
+            return FWD(r);
+    }
+
+    template<size_t BI, std::size_t I>
+    constexpr decltype(auto) select_i(auto&& l, auto&& r) {
+        if constexpr (I == BI)
+            return FWD(l);
+        else
+            return FWD(r);
+    }
 }
 
 template<class U, class Invoker, class Interface, class... Fs>
@@ -207,7 +226,7 @@ struct bindable : detail::overload<Fs...> {
         // Prioritise the method overload
         using dispatcher = std::conditional_t<concepts::CustomisedMethod<bindable, Ts...>, xtd_method_t<>, xtd_free_t>;
         if constexpr (std::is_same_v<void, Interface>)
-            return invoker_t::invoke(dispatcher{}, self(), (Ts&&) ins...);
+            return invoker_t::invoke(dispatcher{}, self(), FWD(ins)...);
         else {
             if constexpr (concepts::CustomisedMethod<bindable, Ts...>)
                 static_assert(concepts::AllowedMethod<bindable, Ts...>,
@@ -215,11 +234,11 @@ struct bindable : detail::overload<Fs...> {
             else
                 static_assert(concepts::AllowedFree<bindable, Ts...>,
                     "No implementation for this parameter set follows the interface");
-            using return_t = decltype(Interface{}.apply((Ts&&) ins...));
+            using return_t = decltype(Interface{}.apply(FWD(ins)...));
             if constexpr (std::is_same_v<void, return_t>)
-                return invoker_t::invoke(dispatcher{}, self(), (Ts&&) ins...);
+                return invoker_t::invoke(dispatcher{}, self(), FWD(ins)...);
             else
-                return return_t(invoker_t::invoke(dispatcher{}, self(), (Ts&&) ins...));
+                return return_t(invoker_t::invoke(dispatcher{}, self(), FWD(ins)...));
         }
     }
 
@@ -229,7 +248,7 @@ struct bindable : detail::overload<Fs...> {
           && (!concepts::BindPlaceholder<Ts> && ...)
           && (std::invocable<Fs const, Ts...> || ...)
     constexpr decltype(auto) operator()(Ts&&... ins) const {
-        return detail::overload<Fs...>::operator()((Ts&&) ins...);
+        return detail::overload<Fs...>::operator()(FWD(ins)...);
     }
 
     [[nodiscard]] constexpr auto operator()() const {
@@ -239,21 +258,37 @@ struct bindable : detail::overload<Fs...> {
     template<class... Ts>
     requires (sizeof...(Ts) > 0) && (concepts::BindPlaceholderAt<Ts, 0> || ...)
     [[nodiscard]] constexpr auto operator()(Ts&&... in) const {
-        return capture<sizeof...(Ts) == 1>((Ts&&) in...);
+        return capture<sizeof...(Ts) != 1>(FWD(in)...);
     }
 
+    // Placeholder as first argument is common case
+    template<bool Store = true, class... Ts>
+    requires (!concepts::BindPlaceholder<Ts> && ...)
+    [[nodiscard]] constexpr auto capture(const bind_placeholder<0>&, Ts&&... in) const {
+        if constexpr (Store) {
+            return make_bound<0, Store>([this, ...in = FWD(in)](auto&& l) {
+                return (*this)(FWD(l), std::move(in)...);
+            });
+        } else {
+            return make_bound([&, this](auto&& l) {
+                return (*this)(FWD(l), FWD(in)...);
+            });
+        }
+    }
+
+    // Placeholder in any position general case
     template<bool Store = true, class... Ts>
     requires (sizeof...(Ts) > 0) && (concepts::BindPlaceholderAt<Ts, 0> || ...)
     [[nodiscard]] constexpr auto capture(Ts&&... in) const {
         constexpr std::size_t count = ((concepts::BindPlaceholder<Ts> ? 1 : 0) + ...);
         static_assert(count == 1, "May specify only one placeholder");
         if constexpr (Store) {
-            return make_bound<0, Store>([=, this]<class L>(L&& l) {
-                return (*this)(select((L&&) l, in)...);
+            return make_bound<0, Store>([this, ...in = FWD(in)](auto&& l) {
+                return (*this)(detail::select(FWD(l), std::move(in))...);
             });
         } else {
-            return make_bound([&, this]<class L>(L&& l) {
-                return (*this)(select((L&&) l, (Ts&&) in)...);
+            return make_bound([&, this](auto&& l) {
+                return (*this)(detail::select(FWD(l), FWD(in))...);
             });
         }
     }
@@ -261,13 +296,13 @@ struct bindable : detail::overload<Fs...> {
     template<size_t I, class... Ts>
     requires (I > 0) && (!concepts::BindPlaceholder<Ts> && ...)
     [[nodiscard]] constexpr auto operator()(const bind_placeholder<I>&, Ts&&... ins) const {
-        return bind_n<I, sizeof...(Ts) == 0>(std::make_index_sequence<1 + sizeof...(Ts)>{}, (Ts&&) ins...);
+        return bind_n<I, sizeof...(Ts) != 0>(std::make_index_sequence<1 + sizeof...(Ts)>{}, FWD(ins)...);
     }
 
     template<size_t I, class... Ts>
     requires (I > 0) && (!concepts::BindPlaceholder<Ts> && ...)
     [[nodiscard]] constexpr auto capture(const bind_placeholder<I>&, Ts&&... ins) const {
-        return bind_n<I, true>(std::make_index_sequence<1 + sizeof...(Ts)>{}, (Ts&&) ins...);
+        return bind_n<I, true>(std::make_index_sequence<1 + sizeof...(Ts)>{}, FWD(ins)...);
     }
 
     constexpr auto& self() const {
@@ -278,43 +313,17 @@ struct bindable : detail::overload<Fs...> {
     }
 
 private:
-
-    template<class L, class R>
-    static constexpr decltype(auto) select(L&& l, R&& r) {
-        if constexpr (concepts::BindPlaceholder<R>)
-            return (L&&) l;
-        else
-            return (R&&) r;
-    }
-
-    template<size_t BI, bool Store, std::size_t... Is, class... Ts>
-    constexpr decltype(auto) bind_n(std::index_sequence<Is...>, Ts&&... ins) const {
+    template<size_t BI, bool Store, std::size_t... Is>
+    constexpr decltype(auto) bind_n(std::index_sequence<Is...>, auto&&... ins) const {
         if constexpr (Store) {
-            return make_bound<0, Store>([=, this]<class L>(L&& l) {
-                return (*this)(select_i<BI, Is>((L&&) l, ins...)...);
+            return make_bound<0, Store>([this, ...ins = FWD(ins)](auto&& l) {
+                return (*this)(detail::select_i<BI, Is>(FWD(l), std::move(ins))...);
             });
         } else {
-            return make_bound([&, this]<class L>(L&& l) {
-                return (*this)(select_i<BI, Is>((L&&) l, (Ts&&) ins...)...);
+            return make_bound([&, this](auto&& l) {
+                return (*this)(detail::select_i<BI, Is>(FWD(l), FWD(ins))...);
             });
         }
-    }
-
-    template<size_t I, class T, class... Ts>
-    static constexpr decltype(auto) get(T&& in, Ts&&... ins) {
-        if constexpr (I == 0)
-            return (T&&) in;
-        else
-            return get<I-1>((Ts&&) ins...);
-    }
-
-    template<size_t BI, std::size_t I, class L, class... Rs>
-    static constexpr decltype(auto) select_i(L&& l, Rs&&... rs) {
-        constexpr std::size_t index = I > BI ? I - 1 : I;
-        if constexpr (index == BI)
-            return (L&&) l;
-        else
-            return get<index>((Rs&&) rs...);
     }
 };
 
@@ -324,10 +333,9 @@ bindable(F...) -> bindable<void, invokers::main, void, F...>;
 template<class Tag, class Invoker = xtd::invokers::main, class Interface = void>
 using tagged_bindable = bindable<Tag, Invoker, Interface>;
 
-template<class F>
-constexpr auto apply(F&& func) {
-    return [func = (F&&)func]<class T>(T&& tuple) mutable {
-        return apply(func, (T&&)tuple);
+constexpr auto apply(auto&& func) {
+    return [func = FWD(func)](auto&& tuple) mutable {
+        return apply(func, FWD(tuple));
     };
 }
 
@@ -354,10 +362,10 @@ namespace literals {
         struct name {\
             template<class... Ts>\
             static constexpr auto invoke(Ts&&... in)\
-                noexcept(noexcept(xtd_invoke_ ## name((Ts&&) in...)))\
-                -> decltype(xtd_invoke_ ## name((Ts&&) in...))\
+                noexcept(noexcept(xtd_invoke_ ## name(FWD(in)...)))\
+                -> decltype(xtd_invoke_ ## name(FWD(in)...))\
             {\
-                return xtd_invoke_ ## name((Ts&&) in...);\
+                return xtd_invoke_ ## name(FWD(in)...);\
             }\
         };\
     }
@@ -426,21 +434,20 @@ namespace xtd::detail {
 #define XTD_USING_IMPL_3(type, namspace, nam) XTD_IMPORT_SPECIALIZED(type, namspace::nam, nam)
 
 #define XTD_IMPL_TRY_METHOD(tag, func) \
-    template<class T, class... Ts>\
-    constexpr auto impl(tag) (T&& obj, Ts&&... in)\
-        noexcept(noexcept((T&&) obj.func((Ts&&) in...)))\
-        -> decltype((T&&) obj.func((Ts&&) in...))\
+    constexpr auto impl(tag) (auto&& obj, auto&&... in)\
+        noexcept(noexcept(FWD(obj).func(FWD(in)...)))\
+        -> decltype(FWD(obj).func(FWD(in)...))\
     {\
-        return ((T&&) obj).func((Ts&&) in...);\
+        return FWD(obj).func(FWD(in)...);\
     }
 
 #define XTD_IMPL_TRY_FORWARD(tag, func) \
     template<class... Ts>\
     constexpr auto impl(tag) (Ts&&... in)\
-        noexcept(noexcept(func((Ts&&) in...)))\
-        -> decltype(func((Ts&&) in...))\
+        noexcept(noexcept(func(FWD(in)...)))\
+        -> decltype(func(FWD(in)...))\
     {\
-        return func((Ts&&) in...);\
+        return func(FWD(in)...);\
     }
 
 #endif /* EXTEND_INCLUDE_EXTEND_HPP */
