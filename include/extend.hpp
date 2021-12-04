@@ -200,12 +200,31 @@ namespace detail {
             return FWD(r);
     }
 
+    template<std::size_t>
+    struct sink {
+        constexpr sink(auto&&...) {}
+    };
+
+    template<std::size_t... Is>
+    constexpr decltype(auto) get_value(sink<Is>..., auto&& value, auto&&...) {
+        return FWD(value);
+    }
+
+    template<std::size_t I, class... Ts>
+    constexpr decltype(auto) get_i(Ts&&... args) {
+        return [&]<std::size_t... Is>(std::index_sequence<Is...>) -> decltype(auto) {
+            return get_value<(0*Is)...>(FWD(args)...);
+        }(std::make_index_sequence<sizeof...(Ts)-1>{});
+    }
+
     template<size_t BI, std::size_t I>
-    constexpr decltype(auto) select_i(auto&& l, auto&& r) {
+    constexpr decltype(auto) select_i(auto&& l, auto&&... r) {
         if constexpr (I == BI)
             return FWD(l);
+        else if constexpr (I > BI)
+            return get_i<I - 1>(FWD(r)...);
         else
-            return FWD(r);
+            return get_i<I>(FWD(r)...);
     }
 }
 
@@ -258,7 +277,8 @@ struct bindable : detail::overload<Fs...> {
     template<class... Ts>
     requires (sizeof...(Ts) > 0) && (concepts::BindPlaceholderAt<Ts, 0> || ...)
     [[nodiscard]] constexpr auto operator()(Ts&&... in) const {
-        return capture<sizeof...(Ts) != 1>(FWD(in)...);
+        // Being an owner is free if there is nothing to bind
+        return capture<sizeof...(Ts) == 1>(FWD(in)...);
     }
 
     // Placeholder as first argument is common case
@@ -267,7 +287,7 @@ struct bindable : detail::overload<Fs...> {
     [[nodiscard]] constexpr auto capture(const bind_placeholder<0>&, Ts&&... in) const {
         if constexpr (Store) {
             return make_bound<0, Store>([this, ...in = FWD(in)](auto&& l) {
-                return (*this)(FWD(l), std::move(in)...);
+                return (*this)(FWD(l), in...);
             });
         } else {
             return make_bound([&, this](auto&& l) {
@@ -284,7 +304,7 @@ struct bindable : detail::overload<Fs...> {
         static_assert(count == 1, "May specify only one placeholder");
         if constexpr (Store) {
             return make_bound<0, Store>([this, ...in = FWD(in)](auto&& l) {
-                return (*this)(detail::select(FWD(l), std::move(in))...);
+                return (*this)(detail::select(FWD(l), in)...);
             });
         } else {
             return make_bound([&, this](auto&& l) {
@@ -296,12 +316,15 @@ struct bindable : detail::overload<Fs...> {
     template<size_t I, class... Ts>
     requires (I > 0) && (!concepts::BindPlaceholder<Ts> && ...)
     [[nodiscard]] constexpr auto operator()(const bind_placeholder<I>&, Ts&&... ins) const {
-        return bind_n<I, sizeof...(Ts) != 0>(std::make_index_sequence<1 + sizeof...(Ts)>{}, FWD(ins)...);
+        static_assert(I <= sizeof...(Ts), "Placeholder index is out of bounds");
+        // Being an owner is free if there is nothing to bind
+        return bind_n<I, sizeof...(Ts) == 0>(std::make_index_sequence<1 + sizeof...(Ts)>{}, FWD(ins)...);
     }
 
     template<size_t I, class... Ts>
     requires (I > 0) && (!concepts::BindPlaceholder<Ts> && ...)
     [[nodiscard]] constexpr auto capture(const bind_placeholder<I>&, Ts&&... ins) const {
+        static_assert(I <= sizeof...(Ts), "Placeholder index is out of bounds");
         return bind_n<I, true>(std::make_index_sequence<1 + sizeof...(Ts)>{}, FWD(ins)...);
     }
 
@@ -317,11 +340,11 @@ private:
     constexpr decltype(auto) bind_n(std::index_sequence<Is...>, auto&&... ins) const {
         if constexpr (Store) {
             return make_bound<0, Store>([this, ...ins = FWD(ins)](auto&& l) {
-                return (*this)(detail::select_i<BI, Is>(FWD(l), std::move(ins))...);
+                return (*this)(detail::select_i<BI, Is>(FWD(l), ins...)...);
             });
         } else {
             return make_bound([&, this](auto&& l) {
-                return (*this)(detail::select_i<BI, Is>(FWD(l), FWD(ins))...);
+                return (*this)(detail::select_i<BI, Is>(FWD(l), FWD(ins)...)...);
             });
         }
     }
