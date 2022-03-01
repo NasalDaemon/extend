@@ -75,10 +75,10 @@ static constexpr bound<std::decay_t<F>, A, O> make_bound(F&& f) {
 
 namespace concepts {
     template<class>
-    constexpr bool is_bindable = false;
+    static constexpr bool is_bindable = false;
 
     template<class U, class... Fs>
-    constexpr bool is_bindable<bindable<U, Fs...>> = true;
+    inline constexpr bool is_bindable<bindable<U, Fs...>> = true;
 
     template<class T>
     concept Bindable = is_bindable<typename std::decay_t<T>::bindable_t>;
@@ -96,9 +96,9 @@ namespace concepts {
     concept SpecializableBindable = Bindable<T> && std::decay_t<T>::is_specializable;
 
     template<class>
-    constexpr bool is_bind_placeholder = false;
+    static constexpr bool is_bind_placeholder = false;
     template<size_t I>
-    constexpr bool is_bind_placeholder<bind_placeholder<I>> = true;
+    inline constexpr bool is_bind_placeholder<bind_placeholder<I>> = true;
 
     template<class T>
     concept BindPlaceholder = is_bind_placeholder<std::decay_t<T>>;
@@ -133,9 +133,9 @@ namespace concepts {
     };
 
     template<class T>
-    constexpr bool is_bound = false;
+    static constexpr bool is_bound = false;
     template<class F, std::size_t A, bool O>
-    constexpr bool is_bound<bound<F, A, O>> = true;
+    inline constexpr bool is_bound<bound<F, A, O>> = true;
 
     template<class T, std::size_t A = 0>
     concept Bound = is_bound<std::decay_t<T>> && std::decay_t<T>::arity == A;
