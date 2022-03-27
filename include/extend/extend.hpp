@@ -23,7 +23,7 @@ template<class T> struct xtd_method_t<T> : xtd_method_t<> {
 }
 
 namespace {
-static constexpr bool xtd_invoker_defined_in_root_namespace = false;
+inline constexpr bool xtd_invoker_defined_in_root_namespace = false;
 }
 
 namespace xtd {
@@ -34,7 +34,7 @@ namespace detail {
 }
 
 namespace invokers {
-    static constexpr bool xtd_invoker_defined_in_root_namespace = true;
+    inline constexpr bool xtd_invoker_defined_in_root_namespace = true;
 
     struct main {
         template<class... Ts>
@@ -75,7 +75,7 @@ static constexpr bound<std::decay_t<F>, A, O> make_bound(F&& f) {
 
 namespace concepts {
     template<class>
-    static constexpr bool is_bindable = false;
+    inline constexpr bool is_bindable = false;
 
     template<class U, class... Fs>
     inline constexpr bool is_bindable<bindable<U, Fs...>> = true;
@@ -96,7 +96,7 @@ namespace concepts {
     concept SpecializableBindable = Bindable<T> && std::decay_t<T>::is_specializable;
 
     template<class>
-    static constexpr bool is_bind_placeholder = false;
+    inline constexpr bool is_bind_placeholder = false;
     template<size_t I>
     inline constexpr bool is_bind_placeholder<bind_placeholder<I>> = true;
 
@@ -133,7 +133,7 @@ namespace concepts {
     };
 
     template<class T>
-    static constexpr bool is_bound = false;
+    inline constexpr bool is_bound = false;
     template<class F, std::size_t A, bool O>
     inline constexpr bool is_bound<bound<F, A, O>> = true;
 
@@ -363,7 +363,7 @@ constexpr auto apply(auto&& func) {
 }
 
 namespace literals {
-    [[maybe_unused]] static constexpr bind_placeholder _;
+    [[maybe_unused]] inline constexpr bind_placeholder _;
 
     template<char... C>
     requires (sizeof...(C) == 1 && ((C >= '0') && ...) && ((C <= '9') && ...))
