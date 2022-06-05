@@ -202,7 +202,7 @@ namespace detail {
 
     template<std::size_t>
     struct sink {
-        constexpr sink(auto&&...) {}
+        constexpr explicit(false) sink(auto&&) {}
     };
 
     template<std::size_t... Is>
@@ -214,7 +214,7 @@ namespace detail {
     constexpr decltype(auto) get_i(Ts&&... args) {
         return [&]<std::size_t... Is>(std::index_sequence<Is...>) -> decltype(auto) {
             return get_value<(0*Is)...>(FWD(args)...);
-        }(std::make_index_sequence<sizeof...(Ts)-1>{});
+        }(std::make_index_sequence<I>{});
     }
 
     template<size_t BI, std::size_t I>
